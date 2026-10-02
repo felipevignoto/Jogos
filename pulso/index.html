@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulso</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b0a14; overflow: hidden; color: #fff;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: safe center; gap: 14px; text-align: center; padding: 20px 16px; box-sizing: border-box;
+    background: rgba(11,10,20,.95); overflow-y: auto; z-index: 5; }
+  .hidden { display: none !important; }
+  h1 { margin: 0; font-size: clamp(44px, 11vw, 92px); letter-spacing: .12em; font-weight: 900;
+    background: linear-gradient(90deg, #ff3d81, #ffc83d, #3dffb5, #a07dff); -webkit-background-clip: text;
+    background-clip: text; color: transparent; }
+  h2 { margin: 0; font-size: clamp(30px, 7vw, 52px); letter-spacing: .08em; }
+  h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .18em; color: #b9b3d6; font-weight: 700; }
+  p { margin: 0; color: #b9b3d6; max-width: 560px; line-height: 1.5; }
+  .keys { display: flex; gap: 8px; align-items: center; }
+  .keys .sep { width: 22px; }
+  kbd { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px;
+    border-radius: 10px; font: 700 19px "Segoe UI", system-ui, sans-serif; color: #0b0a14; }
+  .cards { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; width: min(900px, 100%); }
+  .card { flex: 1 1 300px; box-sizing: border-box; padding: 16px 18px; border-radius: 14px; text-align: left;
+    background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); display: flex; flex-direction: column; gap: 10px; }
+  .card p { font-size: 14px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input[type=text] { flex: 1 1 200px; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.35); color: #fff; font: 15px "Segoe UI", system-ui, sans-serif; }
+  button { padding: 10px 16px; border-radius: 10px; border: 0; font: 700 14px "Segoe UI", system-ui, sans-serif;
+    cursor: pointer; background: #3dffb5; color: #0b0a14; }
+  button.alt { background: #a07dff; }
+  button.ghost { background: rgba(255,255,255,.08); color: #fff; }
+  button:disabled { opacity: .35; cursor: default; }
+  .seg { display: flex; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,.15); }
+  .seg button { border-radius: 0; background: transparent; color: #b9b3d6; flex: 1; }
+  .seg button.on { background: #ffc83d; color: #0b0a14; }
+  label { font-size: 14px; color: #b9b3d6; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  label.file input { display: none; }
+  label.file span { text-decoration: underline; color: #fff; }
+  .msg { font-size: 14px; color: #ffc83d; min-height: 1.3em; }
+  .msg.err { color: #ff6b86; }
+  .start { font-weight: 700; letter-spacing: .18em; }
+  .foot { font-size: 13px; color: #8f89ad; }
+  .stats { display: grid; grid-template-columns: auto auto; gap: 6px 28px; font-size: 18px; text-align: left; }
+  .stats span:nth-child(odd) { color: #b9b3d6; }
+  .stats span:nth-child(even) { font-weight: 700; text-align: right; }
+  .best { color: #ffc83d; font-weight: 700; font-size: 18px; }
+  #videoBox { position: fixed; left: 20px; top: 96px; width: 320px; height: 180px; border-radius: 10px; overflow: hidden;
+    background: #000; box-shadow: 0 0 0 1px rgba(255,255,255,.12); z-index: 2; pointer-events: none; }
+  #videoBox iframe { width: 100%; height: 100%; border: 0; }
+  @media (max-width: 1000px) { #videoBox { width: 192px; height: 108px; top: 120px; left: 12px; } }
+  @media (max-width: 640px) { #videoBox { display: none; } }
+  .taps { display: flex; gap: 6px; justify-content: center; min-height: 14px; }
+  .taps i { width: 12px; height: 12px; border-radius: 50%; background: #3dffb5; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="videoBox" class="hidden"><div id="ytPlayer"></div></div>
+
+<div id="menu" class="overlay">
+  <h1>PULSO</h1>
+  <p>Aperte a tecla da pista quando a nota cruzar a linha. Se errar demais, a energia acaba e você recomeça do zero.</p>
+  <div class="keys">
+    <kbd style="background:#ff3d81">A</kbd><kbd style="background:#ff7a3d">S</kbd><kbd style="background:#ffc83d">D</kbd>
+    <span class="sep"></span>
+    <kbd style="background:#3dffb5">J</kbd><kbd style="background:#3db8ff">K</kbd><kbd style="background:#a07dff">L</kbd>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h3>MODO CLÁSSICO</h3>
+      <p>Música própria do jogo, que acelera a cada nível.</p>
+      <div class="row"><button id="classicBtn">Jogar (Espaço)</button></div>
+    </div>
+
+    <div class="card">
+      <h3>MÚSICA DO YOUTUBE</h3>
+      <div class="row">
+        <input id="ytUrl" type="text" placeholder="Cole o link do YouTube" autocomplete="off" spellcheck="false">
+        <button id="ytLoad">Carregar</button>
+      </div>
+      <label class="file">ou <span>escolha um arquivo de áudio</span> do computador<input id="fileIn" type="file" accept="audio/*"></label>
+      <div class="seg" id="diff">
+        <button data-d="easy">Fácil</button><button data-d="normal">Normal</button><button data-d="hard">Difícil</button>
+      </div>
+      <label><input type="checkbox" id="showVideo" checked> Mostrar o vídeo junto</label>
+      <div class="msg" id="songMsg"></div>
+      <div class="row"><button id="songPlay" class="alt" disabled>Jogar esta música</button></div>
+    </div>
+  </div>
+
+  <div class="row" style="justify-content:center">
+    <button id="calibBtn" class="ghost">Calibrar o tempo (C)</button>
+  </div>
+  <p class="foot">Esc pausa · V mostra/esconde o vídeo · [ e ] ajustam o atraso manualmente</p>
+</div>
+
+<div id="calib" class="overlay hidden">
+  <h2>CALIBRAR</h2>
+  <p>Você vai ouvir cliques regulares. Aperte ESPAÇO (ou qualquer tecla de pista) exatamente junto com cada clique.
+     Use o som, não os olhos. Assim o jogo descobre o atraso do seu fone/caixa de som.</p>
+  <div class="taps" id="calibTaps"></div>
+  <div class="best" id="calibResult"></div>
+  <div class="start" id="calibFoot">OUÇA E APERTE…</div>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <h2>PAUSADO</h2>
+  <p id="pauseInfo"></p>
+  <p id="pauseHint" class="best"></p>
+  <div class="start">ESC CONTINUA · Q ENCERRA</div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <h2 id="overTitle">FIM</h2>
+  <p id="overReason"></p>
+  <div class="stats" id="stats"></div>
+  <div class="best" id="best"></div>
+  <div class="start">ESPAÇO VOLTA AO MENU</div>
+</div>
+
+<script src="analysis.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

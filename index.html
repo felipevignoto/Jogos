@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jogos</title>
+<style>
+  :root { --bg: #0b0a14; --fg: #fff; --muted: #b9b3d6; --card: rgba(255,255,255,.05); --line: rgba(255,255,255,.1); }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--fg);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 56px 16px; }
+  h1 { margin: 0 0 8px; font-size: clamp(36px, 8vw, 64px); letter-spacing: .08em; font-weight: 900; }
+  .lead { margin: 0 0 36px; color: var(--muted); font-size: 18px; line-height: 1.5; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  a.card { display: flex; flex-direction: column; gap: 10px; padding: 22px; border-radius: 16px; background: var(--card);
+    border: 1px solid var(--line); color: inherit; text-decoration: none; transition: border-color .15s; }
+  a.card:hover, a.card:focus-visible { border-color: rgba(255,255,255,.35); outline: none; }
+  .name { font-size: 34px; font-weight: 900; letter-spacing: .1em; background-clip: text; -webkit-background-clip: text; color: transparent; }
+  .pulso { background-image: linear-gradient(90deg, #ff3d81, #ffc83d, #3dffb5, #a07dff); }
+  .digita { background-image: linear-gradient(90deg, #3dffb5, #3db8ff, #a07dff, #ff3d81); font-family: ui-monospace, Consolas, monospace; }
+  .card p { margin: 0; color: var(--muted); line-height: 1.5; }
+  .keys { display: flex; gap: 6px; flex-wrap: wrap; }
+  kbd { padding: 3px 9px; border-radius: 6px; background: rgba(255,255,255,.1); font: 600 14px ui-monospace, Consolas, monospace; }
+  .play { margin-top: auto; font-weight: 700; letter-spacing: .12em; font-size: 14px; }
+  footer { margin-top: 40px; color: #8f89ad; font-size: 14px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<main>
+  <h1>JOGOS</h1>
+  <p class="lead">Jogos de velocidade e reflexo para jogar no navegador, com o teclado e com música.</p>
+  <div class="grid">
+    <a class="card" href="pulso/">
+      <div class="name pulso">PULSO</div>
+      <p>Jogo de ritmo: aperte a tecla da pista quando a nota cruzar a linha. Música própria que acelera, ou qualquer música do seu computador.</p>
+      <div class="keys"><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></div>
+      <div class="play">JOGAR →</div>
+    </a>
+    <a class="card" href="digita/">
+      <div class="name digita">DIGITA</div>
+      <p>Digite as palavras antes que o tempo acabe. Começa com palavras curtas e vai ficando mais difícil. Mais velocidade, mais pontos.</p>
+      <div class="keys"><kbd>teclado inteiro</kbd></div>
+      <div class="play">JOGAR →</div>
+    </a>
+  </div>
+  <footer>Use fones de ouvido. O modo “link do YouTube” do Pulso funciona quando o jogo roda no seu computador (veja o README).</footer>
+</main>
+</body>
+</html>

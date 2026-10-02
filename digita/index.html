@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Digita</title>
+<style>
+  :root { --bg: #0b0a14; --fg: #fff; --muted: #b9b3d6; --dim: #8f89ad; --ok: #3dffb5; --bad: #ff4d6d;
+    --gold: #ffc83d; --violet: #a07dff; --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); overflow: hidden;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; user-select: none; }
+
+  /* HUD */
+  .hud { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start;
+    padding: 18px 20px; box-sizing: border-box; gap: 12px; }
+  .stat .v { font-size: 30px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 12px; letter-spacing: .14em; color: var(--muted); font-weight: 600; }
+  .stat.r { text-align: right; }
+  .center { flex: 1; max-width: 340px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 6px; }
+  .bar { width: 100%; height: 10px; border-radius: 5px; background: rgba(255,255,255,.1); overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 100%; background: var(--ok); border-radius: 5px; }
+  .tiny { font-size: 11px; letter-spacing: .14em; color: var(--dim); font-weight: 600; }
+
+  /* Playfield */
+  .play { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 0 16px; }
+  .gain { height: 28px; font-weight: 800; font-size: 22px; color: var(--gold); opacity: 0; transition: opacity .5s; }
+  .gain.show { opacity: 1; transition: none; }
+  .word { font-family: var(--mono); font-size: clamp(36px, 9vw, 96px); font-weight: 700; letter-spacing: .04em;
+    white-space: nowrap; max-width: 100%; }
+  .word span { color: rgba(255,255,255,.55); display: inline-block; position: relative; }
+  .word span.done { color: var(--ok); animation: pop .12s ease-out; }
+  .word span.cur { color: #fff; }
+  .word span.cur::after { content: ""; position: absolute; left: 8%; right: 8%; bottom: -6px; height: 5px; border-radius: 3px; background: var(--gold); }
+  .word span.bad { color: var(--bad); }
+  .word.complete span { color: var(--gold); }
+  @keyframes pop { from { transform: translateY(-6px) scale(1.15); } to { transform: none; } }
+  .timer { width: min(560px, 90vw); height: 8px; border-radius: 4px; background: rgba(255,255,255,.1); overflow: hidden; }
+  .timer > i { display: block; height: 100%; width: 100%; background: var(--ok); }
+  .queue { display: flex; gap: 22px; font-family: var(--mono); font-size: clamp(16px, 2.6vw, 24px); color: var(--dim);
+    flex-wrap: wrap; justify-content: center; min-height: 32px; }
+  .queue span:first-child { color: var(--muted); }
+  .bottom { position: fixed; bottom: 18px; left: 0; right: 0; display: flex; justify-content: center; gap: 36px; }
+  .bottom .stat { text-align: center; }
+  .bottom .v { font-size: 24px; }
+  .banner { position: fixed; left: 0; right: 0; top: 24%; text-align: center; font-weight: 900; font-size: clamp(30px, 6vw, 54px);
+    opacity: 0; transition: opacity .6s; pointer-events: none; }
+  .banner small { display: block; font-size: 20px; color: var(--gold); font-weight: 700; margin-top: 6px; }
+  .banner.show { opacity: 1; transition: opacity .12s; }
+  .edge { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 0 6px var(--bad); opacity: 0; }
+
+  /* Overlays */
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: safe center;
+    gap: 14px; text-align: center; padding: 20px 16px; box-sizing: border-box; background: rgba(11,10,20,.96); overflow-y: auto; z-index: 5; }
+  .hidden { display: none !important; }
+  h1 { margin: 0; font-size: clamp(44px, 11vw, 92px); letter-spacing: .1em; font-weight: 900; font-family: var(--mono);
+    background: linear-gradient(90deg, #3dffb5, #3db8ff, #a07dff, #ff3d81); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  h2 { margin: 0; font-size: clamp(30px, 7vw, 52px); letter-spacing: .08em; }
+  p { margin: 0; color: var(--muted); max-width: 560px; line-height: 1.5; }
+  .start { font-weight: 700; letter-spacing: .18em; }
+  .foot { font-size: 13px; color: var(--dim); }
+  .stats { display: grid; grid-template-columns: auto auto; gap: 6px 28px; font-size: 18px; text-align: left; }
+  .stats span:nth-child(odd) { color: var(--muted); }
+  .stats span:nth-child(even) { font-weight: 700; text-align: right; }
+  .best { color: var(--gold); font-weight: 700; font-size: 18px; }
+  .example { font-family: var(--mono); font-size: 28px; letter-spacing: .04em; }
+  .example b { color: var(--ok); }
+</style>
+</head>
+<body>
+
+<div class="hud">
+  <div class="stat"><div class="v" id="score">0</div><div class="l">PONTOS</div></div>
+  <div class="center">
+    <div class="bar"><i id="energy"></i></div>
+    <div class="tiny">ENERGIA</div>
+  </div>
+  <div class="stat r"><div class="v" id="level">NÍVEL 1</div><div class="l" id="bpm">90 BPM</div></div>
+</div>
+
+<div class="play">
+  <div class="gain" id="gain"></div>
+  <div class="word" id="word"></div>
+  <div class="timer"><i id="timer"></i></div>
+  <div class="queue" id="queue"></div>
+</div>
+
+<div class="bottom">
+  <div class="stat"><div class="v" id="wpm">0</div><div class="l">PPM</div></div>
+  <div class="stat"><div class="v" id="combo">0</div><div class="l">COMBO</div></div>
+  <div class="stat"><div class="v" id="acc">100%</div><div class="l">PRECISÃO</div></div>
+</div>
+
+<div class="banner" id="banner"></div>
+<div class="edge" id="edge"></div>
+
+<div id="menu" class="overlay">
+  <h1>DIGITA</h1>
+  <p>Digite a palavra antes que o tempo acabe. Quanto mais rápido, mais pontos.
+     As palavras começam curtas e fáceis e ficam mais longas e difíceis com o tempo.
+     Se deixar muitas escaparem, a energia acaba e você recomeça do zero.</p>
+  <div class="example"><b>tecl</b>ado</div>
+  <p class="foot">Acentos são opcionais: “mae” vale para “mãe”, “c” vale para “ç”.</p>
+  <div class="start">APERTE ENTER PARA COMEÇAR</div>
+  <p class="foot">Esc pausa · Tab liga/desliga a música</p>
+</div>
+
+<div id="pause" class="overlay hidden">
+  <h2>PAUSADO</h2>
+  <div class="start">ESC CONTINUA · Q ENCERRA</div>
+</div>
+
+<div id="over" class="overlay hidden">
+  <h2>FIM</h2>
+  <div class="stats" id="stats"></div>
+  <div class="best" id="best"></div>
+  <div class="start">ENTER VOLTA AO MENU</div>
+</div>
+
+<script>
+'use strict';
+// ---------- Words ----------
+// Difficulty is computed from length, keyboard position and rare letters, then sorted.
+const RAW_WORDS = `
+sal lua mar sol pai mãe céu dia rio chá pé mão fé voz boi gato casa sala mala fala dado lado gala saia asa lã ala fada
+jaca faca gás lá já dá há alfa sadia salada galho folha ideia olho ovo uva bola bolo vaso cama mesa rua nada tudo lago
+pato rato sapo foca vaca dedo cedo medo nó pó só tão mês ano hora vez cor dor amor flor mel pão sopa suco leite café
+arroz feijão carne peixe gelo fogo luz paz sim não bom mau rei lei sede rede onda fada dama saga alga lasca falsa
+alface alho agua pele dente nariz braço perna cabelo boca lábio ombro joelho calda massa caldo gasolina sala gaveta
+janela cadeira caneta papel livro escola cidade estrada viagem música teclado jogo ritmo tempo rápido lento verde azul
+amarelo vermelho laranja banana morango abacaxi melancia cenoura tomate batata cozinha banheiro quarto jardim floresta
+montanha oceano planeta estrela cometa foguete avião navio trem bicicleta motor ponte prédio parque praia areia vento
+chuva nuvem trovão relâmpago inverno verão outono primavera segunda sábado domingo janeiro fevereiro dezembro amigo
+família irmão criança pessoa trabalho empresa projeto código servidor internet digitar palavra frase letra número
+sorriso coragem vitória desafio energia segredo mistério aventura história memória silêncio barulho guitarra bateria
+piano violino cantor dança festa presente surpresa chocolate sorvete biscoito pipoca hambúrguer pizza queijo manteiga
+garfo colher copo garrafa xícara travesseiro cobertor sapato camisa jaqueta chapéu óculos relógio celular câmera tela
+quadro pincel tinta desenho escultura museu teatro cinema filme roteiro diretor ator plateia aplauso caminho cavalo
+coelho macaco leão tigre girafa elefante baleia golfinho tubarão polvo lagosta camarão sereia dragão castelo princesa
+espada escudo tesouro mapa ilha deserto vulcão caverna cachoeira lagoa riacho pedra cristal diamante ouro prata bronze
+ferro madeira vidro plástico borracha algodão seda veludo couro tijolo cimento telhado parede escada elevador corredor
+paralelepípedo desenvolvimento extraordinário responsabilidade otorrinolaringologista inconstitucional característica
+conhecimento oportunidade transformação comunicação independência personalidade sustentabilidade infraestrutura
+quintessência excepcional exuberante xilofone quaresma quadrúpede aquarela arquitetura engenharia programação algoritmo
+criptografia biblioteca enciclopédia hipopótamo rinoceronte crocodilo ornitorrinco borboleta caranguejo tartaruga
+pinguim esquilo quilômetro exagerado exército fixação oxigênio ozônio zoológico anzol vizinho azulejo quietude
+questionário equilíbrio sequência frequência eloquência magnífico psicologia pneumático simultaneamente perfeitamente
+absolutamente aproximadamente imediatamente especialmente desafiador inacreditável imprevisível incompreensível
+multiplicação eletricidade refrigerador liquidificador computador processador velocidade aceleração gravidade
+astronauta constelação galáxia universo tecnologia inteligência experiência consciência convivência persistência
+paciência excelência jabuticaba maracujá abacate pêssego framboesa mexerica tangerina berinjela abobrinha beterraba
+espinafre azeitona amêndoa castanha gengibre exótico xadrez zebra quiosque boxe táxi oxalá wafer yoga kiwi waffle
+explicação exclusivo expressivo extravagante hexágono bizarro buzina cozido jazz pizzaria quebrado esquecido
+`;
+
+const ROWS = { home: 'asdfghjklç', top: 'qwertyuiop', bottom: 'zxcvbnm' };
+const RARE = 'qwxzykç';
+const strip = s => s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+function wordDifficulty(w) {
+  let d = w.length;
+  for (const ch of w) {
+    const b = strip(ch);
+    if (ch === 'ç') d += 1.2;
+    else if (b !== ch) d += 0.7;          // accented letter
+    if (ROWS.top.includes(b)) d += 0.25;
+    else if (ROWS.bottom.includes(b)) d += 0.45;
+    if (RARE.includes(b)) d += 0.9;
+  }
+  for (let i = 1; i < w.length; i++) if (w[i] === w[i - 1]) d += 0.3; // double letters trip people up
+  return d;
+}
+const WORDS = [...new Set(RAW_WORDS.split(/\s+/).filter(Boolean))]
+  .map(w => ({ w, d: wordDifficulty(w) }))
+  .sort((a, b) => a.d - b.d)
+  .map(o => o.w);
+
+// Accent- and cedilla-insensitive comparison for one character.
+const same = (typed, target) => strip(typed.toLowerCase()) === strip(target);
+
+// ---------- Tuning ----------
+const LEVEL_SECONDS = 20;
+const secPerChar = lvl => Math.max(0.17, 0.55 - 0.04 * (lvl - 1));  // ~22 PPM at level 1, ~70 PPM late
+const levelBpm = lvl => Math.min(90 + 8 * (lvl - 1), 160);
+const ENERGY = { timeout: -0.2, typo: -0.03, word: 0.04 };
+
+// Level picks a moving window over the difficulty-sorted list.
+function pickWord(lvl, recent) {
+  const n = WORDS.length, span = Math.floor(n * 0.25);
+  const p = Math.min(1, (lvl - 1) / 10);
+  const start = Math.floor(p * (n - span));
+  for (let tries = 0; tries < 30; tries++) {
+    const w = WORDS[start + Math.floor(Math.random() * span)];
+    if (!recent.includes(w)) return w;
+  }
+  return WORDS[start];
+}
+
+// ---------- Audio ----------
+const PROG = [
+  { root: 45, pad: [57, 60, 64], tones: [64, 69, 72, 76, 81, 84] },
+  { root: 41, pad: [53, 57, 60], tones: [65, 69, 72, 77, 81, 84] },
+  { root: 48, pad: [55, 60, 64], tones: [64, 67, 72, 76, 79, 84] },
+  { root: 43, pad: [55, 59, 62], tones: [62, 67, 71, 74, 79, 83] },
+];
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+let actx, master, musicBus, sfxBus, musicFilter, noiseBuf;
+let musicOn = true;
+function initAudio() {
+  if (actx) return;
+  actx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  const comp = actx.createDynamicsCompressor();
+  master = actx.createGain();
+  master.gain.value = 0.85;
+  master.connect(comp).connect(actx.destination);
+  musicFilter = actx.createBiquadFilter();
+  musicFilter.type = 'lowpass'; musicFilter.frequency.value = 18000;
+  musicBus = actx.createGain(); musicBus.gain.value = 0.5;
+  musicBus.connect(musicFilter).connect(master);
+  sfxBus = actx.createGain(); sfxBus.connect(master);
+  noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+}
+function env(g, t, a, peak, d) {
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + a);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + a + d);
+}
+function osc(type, freq, t, peak, a, d, dest = musicBus, endFreq) {
+  const o = actx.createOscillator(), g = actx.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t + a + d);
+  env(g, t, a, peak, d);
+  o.connect(g).connect(dest); o.start(t); o.stop(t + a + d + 0.05);
+}
+function noise(t, type, freq, peak, dec, dest = musicBus) {
+  const s = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+  s.buffer = noiseBuf; f.type = type; f.frequency.value = freq;
+  env(g, t, 0.002, peak, dec);
+  s.connect(f).connect(g).connect(dest);
+  s.start(t, Math.random() * 0.5); s.stop(t + dec + 0.05);
+}
+function bass(t, m, dur) {
+  const o = actx.createOscillator(), f = actx.createBiquadFilter(), g = actx.createGain();
+  o.type = 'sawtooth'; o.frequency.value = mtof(m);
+  f.type = 'lowpass'; f.Q.value = 5;
+  f.frequency.setValueAtTime(800, t); f.frequency.exponentialRampToValueAtTime(180, t + dur);
+  env(g, t, 0.005, 0.2, dur);
+  o.connect(f).connect(g).connect(musicBus); o.start(t); o.stop(t + dur + 0.05);
+}
+function pad(t, ms, dur) {
+  const f = actx.createBiquadFilter(), g = actx.createGain();
+  f.type = 'lowpass'; f.frequency.value = 1300;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.05, t + dur * 0.25);
+  g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  f.connect(g).connect(musicBus);
+  for (const m of ms) for (const det of [-7, 7]) {
+    const o = actx.createOscillator();
+    o.type = 'sawtooth'; o.frequency.value = mtof(m); o.detune.value = det;
+    o.connect(f); o.start(t); o.stop(t + dur + 0.05);
+  }
+}
+// Each correct letter plays the next note of the current chord: typing builds the melody.
+function keyNote(index) {
+  const t = actx.currentTime, ch = PROG[seq.bar % 4];
+  const m = ch.tones[index % 6] + (Math.floor(index / 6) % 2) * 12;
+  const o = actx.createOscillator(), f = actx.createBiquadFilter(), g = actx.createGain();
+  o.type = 'square'; o.frequency.value = mtof(m);
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(4500, t); f.frequency.exponentialRampToValueAtTime(500, t + 0.25);
+  env(g, t, 0.003, 0.12, 0.25);
+  o.connect(f).connect(g).connect(sfxBus); o.start(t); o.stop(t + 0.3);
+  noise(t, 'bandpass', 4000, 0.06, 0.02, sfxBus); // key click
+}
+function wordChord(fast) {
+  const t = actx.currentTime, ch = PROG[seq.bar % 4];
+  ch.tones.slice(1, 4).forEach((m, i) => osc('triangle', mtof(m + 12), t + i * 0.035, 0.1, 0.004, 0.4, sfxBus));
+  if (fast) osc('sine', mtof(ch.tones[5] + 12), t + 0.1, 0.08, 0.004, 0.6, sfxBus);
+}
+function typoSound() {
+  const t = actx.currentTime;
+  osc('sawtooth', 120, t, 0.07, 0.003, 0.12, sfxBus, 70);
+}
+function muffle() {
+  const t = actx.currentTime, fr = musicFilter.frequency;
+  fr.cancelScheduledValues(t);
+  fr.setValueAtTime(500, t);
+  fr.exponentialRampToValueAtTime(18000, t + 0.7);
+}
+
+// Simple beat sequencer, tempo follows the level.
+const seq = { next: 0, step: 0, bar: 0 };
+function scheduleMusic() {
+  while (seq.next < actx.currentTime + 0.12) {
+    const t = seq.next, s = seq.step % 16, sd = 60 / G.bpm / 4;
+    seq.bar = Math.floor(seq.step / 16);
+    const ch = PROG[seq.bar % 4];
+    if (musicOn) {
+      if (s % 4 === 0) osc('sine', 150, t, 0.7, 0.003, 0.28, musicBus, 42);
+      if (s === 4 || s === 12) noise(t, 'highpass', 1500, 0.22, 0.14);
+      if (s % 4 === 2) noise(t, 'highpass', 7500, 0.1, 0.05);
+      if (G.level >= 3 && s % 2 === 1) noise(t, 'highpass', 8000, 0.04, 0.03);
+      if (s % 4 === 2) bass(t, ch.root + 12, sd * 1.8);
+      else if (G.level >= 2 && s % 4 === 0) bass(t, ch.root, sd * 1.8);
+      if (s === 0) pad(t, ch.pad, sd * 16);
+    }
+    seq.next += sd;
+    seq.step++;
+  }
+}
+
+// ---------- Game ----------
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+let state = 'menu';
+let G = null;
+let pausedAt = 0;
+
+function newGame() {
+  G = {
+    score: 0, combo: 0, maxCombo: 0, energy: 1, level: 1, bpm: levelBpm(1),
+    start: performance.now(), words: 0, missed: 0, keys: 0, typos: 0,
+    typedChars: 0, typingMs: 0, bestWpm: 0, recent: [], queue: [],
+    word: '', pos: 0, wordStart: 0, limit: 0, hadTypo: false,
+  };
+  for (let i = 0; i < 4; i++) G.queue.push(nextWord());
+  nextTarget();
+}
+
+function nextWord() {
+  const w = pickWord(G.level, G.recent);
+  G.recent.push(w);
+  if (G.recent.length > 40) G.recent.shift();
+  return w;
+}
+
+function nextTarget() {
+  G.word = G.queue.shift();
+  G.queue.push(nextWord());
+  G.pos = 0;
+  G.hadTypo = false;
+  G.wordStart = performance.now();
+  G.limit = (1.4 + G.word.length * secPerChar(G.level)) * 1000;
+  renderWord();
+  $('queue').innerHTML = G.queue.slice(0, 3).map(w => `<span>${w}</span>`).join('');
+}
+
+function renderWord(badIndex = -1) {
+  $('word').classList.remove('complete');
+  $('word').innerHTML = [...G.word].map((ch, i) => {
+    const cls = i < G.pos ? 'done' : i === G.pos ? (i === badIndex ? 'cur bad' : 'cur') : '';
+    return `<span class="${cls}">${ch}</span>`;
+  }).join('');
+}
+
+function typeKey(key) {
+  if (state !== 'playing' || G.pos >= G.word.length) return;
+  G.keys++;
+  if (same(key, G.word[G.pos])) {
+    keyNote(G.pos);
+    G.pos++;
+    // Only re-style the letters that changed, so the pop animation plays once
+    const spans = $('word').children;
+    spans[G.pos - 1].className = 'done';
+    if (G.pos < G.word.length) spans[G.pos].className = 'cur';
+    if (G.pos === G.word.length) completeWord();
+  } else {
+    G.typos++;
+    G.combo = 0;
+    G.hadTypo = true;
+    G.energy = Math.max(0, G.energy + ENERGY.typo);
+    typoSound();
+    renderWord(G.pos);
+    flashEdge(0.5);
+    if (G.energy <= 0) restartFromZero();
+  }
+}
+
+function completeWord() {
+  const ms = performance.now() - G.wordStart;
+  const chars = G.word.length;
+  const wpm = chars / 5 / (ms / 60000);
+  G.typedChars += chars;
+  G.typingMs += ms;
+  G.bestWpm = Math.max(G.bestWpm, wpm);
+  G.words++;
+  G.combo++;
+  G.maxCombo = Math.max(G.maxCombo, G.combo);
+  // Points: length x speed x combo. Speed is relative to 30 PPM, capped at 4x.
+  const speed = Math.max(0.5, Math.min(4, wpm / 30));
+  const comboMult = 1 + Math.min(G.combo, 30) * 0.05;
+  const perfect = !G.hadTypo;
+  const pts = Math.round(chars * 10 * speed * comboMult * (perfect ? 1.2 : 1));
+  G.score += pts;
+  G.energy = Math.min(1, G.energy + ENERGY.word);
+  wordChord(wpm > 50);
+  $('word').classList.add('complete');
+  showGain(`+${pts} · ${Math.round(wpm)} PPM${perfect ? ' · sem erros' : ''}`);
+  setTimeout(() => { if (state === 'playing') nextTarget(); }, 90);
+  G.pos = G.word.length; // block input during the short highlight
+}
+
+function timeout() {
+  G.missed++;
+  G.combo = 0;
+  G.energy = Math.max(0, G.energy + ENERGY.timeout);
+  typoSound(); muffle();
+  flashEdge(1);
+  showGain('ESCAPOU: ' + G.word, true);
+  if (G.energy <= 0) return restartFromZero();
+  nextTarget();
+}
+
+function restartFromZero() {
+  const last = G.score;
+  saveBest(last);
+  newGame();
+  banner('DO ZERO!', 'Última tentativa: ' + last.toLocaleString('pt-BR') + ' pts');
+}
+
+// ---------- Feedback ----------
+let gainTimer;
+function showGain(text, bad) {
+  const el = $('gain');
+  el.textContent = text;
+  el.style.color = bad ? 'var(--bad)' : 'var(--gold)';
+  el.classList.add('show');
+  clearTimeout(gainTimer);
+  gainTimer = setTimeout(() => el.classList.remove('show'), 700);
+}
+let bannerTimer;
+function banner(text, sub) {
+  const el = $('banner');
+  el.innerHTML = text + (sub ? `<small>${sub}</small>` : '');
+  el.classList.add('show');
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => el.classList.remove('show'), 1400);
+}
+function flashEdge(strength) {
+  const el = $('edge');
+  el.style.transition = 'none';
+  el.style.opacity = strength;
+  requestAnimationFrame(() => { el.style.transition = 'opacity .4s'; el.style.opacity = 0; });
+}
+
+// ---------- Flow ----------
+function show(id) { for (const o of ['menu', 'pause', 'over']) $(o).classList.toggle('hidden', o !== id); }
+function start() {
+  initAudio();
+  actx.resume();
+  newGame();
+  seq.next = actx.currentTime + 0.1; seq.step = 0;
+  master.gain.cancelScheduledValues(actx.currentTime);
+  master.gain.setValueAtTime(0.85, actx.currentTime);
+  state = 'playing';
+  show(null);
+  banner('NÍVEL 1', levelBpm(1) + ' BPM');
+}
+function togglePause() {
+  if (state === 'playing') {
+    state = 'paused'; pausedAt = performance.now(); actx.suspend(); show('pause');
+  } else if (state === 'paused') {
+    // Shift timers so the pause doesn't count
+    const d = performance.now() - pausedAt;
+    G.start += d; G.wordStart += d;
+    state = 'playing'; actx.resume(); show(null);
+  }
+}
+function saveBest(score) {
+  const best = +store.get('digita-best', 0) || 0;
+  if (score > best) { store.set('digita-best', score); return { best: score, record: true }; }
+  return { best, record: false };
+}
+function endGame() {
+  state = 'over';
+  actx.resume();
+  const t = actx.currentTime;
+  master.gain.setValueAtTime(master.gain.value, t);
+  master.gain.exponentialRampToValueAtTime(0.0001, t + 0.8);
+  const { best, record } = saveBest(G.score);
+  const avg = G.typingMs ? G.typedChars / 5 / (G.typingMs / 60000) : 0;
+  $('stats').innerHTML = [
+    ['Pontos', G.score.toLocaleString('pt-BR')], ['Nível', G.level],
+    ['Palavras', G.words], ['Escaparam', G.missed],
+    ['Média', Math.round(avg) + ' PPM'], ['Mais rápida', Math.round(G.bestWpm) + ' PPM'],
+    ['Precisão', accuracy() + '%'], ['Combo máximo', G.maxCombo],
+  ].map(([k, v]) => `<span>${k}</span><span>${v}</span>`).join('');
+  $('best').textContent = record ? '★ NOVO RECORDE ★' : 'Recorde: ' + best.toLocaleString('pt-BR');
+  show('over');
+}
+const accuracy = () => G.keys ? Math.round((G.keys - G.typos) / G.keys * 100) : 100;
+
+window.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if (state === 'menu' || state === 'over') {
+    if (k === 'Enter' || k === ' ') { e.preventDefault(); state === 'menu' ? start() : (state = 'menu', show('menu')); }
+    return;
+  }
+  if (k === 'Escape') return togglePause();
+  if (state === 'paused') {
+    if (k.toLowerCase() === 'q') endGame();
+    return;
+  }
+  if (k.length === 1 && /\p{L}/u.test(k)) { e.preventDefault(); typeKey(k); }
+  else if (k === ' ') e.preventDefault();
+});
+// Music toggle: letters are all used for typing, so it lives on Tab.
+window.addEventListener('keydown', e => {
+  if (e.key === 'Tab') { e.preventDefault(); musicOn = !musicOn; banner(musicOn ? 'Música ligada' : 'Música desligada'); }
+});
+window.addEventListener('blur', () => { if (state === 'playing') togglePause(); });
+
+// ---------- Loop ----------
+function frame() {
+  requestAnimationFrame(frame);
+  if (!G || state !== 'playing') return;
+  tick();
+  const left = Math.max(0, 1 - (performance.now() - G.wordStart) / G.limit);
+  const bar = $('timer');
+  bar.style.width = (left * 100) + '%';
+  bar.style.background = left > 0.5 ? 'var(--ok)' : left > 0.25 ? 'var(--gold)' : 'var(--bad)';
+  $('score').textContent = G.score.toLocaleString('pt-BR');
+  $('energy').style.width = (G.energy * 100) + '%';
+  $('energy').style.background = G.energy > 0.5 ? 'var(--ok)' : G.energy > 0.25 ? 'var(--gold)' : 'var(--bad)';
+  $('level').textContent = 'NÍVEL ' + G.level;
+  $('bpm').textContent = G.bpm + ' BPM';
+  $('wpm').textContent = G.typingMs ? Math.round(G.typedChars / 5 / (G.typingMs / 60000)) : 0;
+  $('combo').textContent = G.combo;
+  $('acc').textContent = accuracy() + '%';
+}
+// Logic runs on a timer as well, so music and timeouts don't depend on the frame rate.
+function tick() {
+  if (!G || state !== 'playing') return;
+  const lvl = 1 + Math.floor((performance.now() - G.start) / 1000 / LEVEL_SECONDS);
+  if (lvl !== G.level) {
+    G.level = lvl;
+    G.bpm = levelBpm(lvl);
+    banner('NÍVEL ' + lvl, G.bpm + ' BPM');
+  }
+  scheduleMusic();
+  if (G.pos < G.word.length && performance.now() - G.wordStart > G.limit) timeout();
+}
+setInterval(tick, 25);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
